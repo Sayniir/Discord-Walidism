@@ -6,6 +6,11 @@ const {
     ActivityType,
     interaction,
 } = require("discord.js");
+const {
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+} = require("discord.js");
 const fs = require("fs");
 const path = require("path");
 const { type } = require("os");
@@ -19,6 +24,7 @@ const tickets = require("./events/Tickets/tickets.js");
 const ModerationBot = require("./events/interactionCreate/clear.js");
 const MusicBot = require("./events/Musique/player.js");
 const levelSystem = require("./events/Levels/levelSystem.js");
+const Ready = require("./events/ready/consoleLog.js");
 
 // intents for the Discord client - CORRIGÉ
 const client = new Client({
@@ -183,6 +189,8 @@ client.on("ready", async () => {
     const musicBot = new MusicBot(client);
     await musicBot.init();
 });
+
+Ready(client);
 
 // launch the bot
 client.login(process.env.DISCORD_TOKEN);
