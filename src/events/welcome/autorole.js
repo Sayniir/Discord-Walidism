@@ -1,17 +1,22 @@
-const {Guild} = require('discord.js')
+const { getGuildConfig } = require('../../database/queries');
 
-module.exports = async (member) => {
-    const roleId = '1386748221073653942';
+module.exports = {
+    name: 'guildMemberAdd',
+    async execute(member, client) {
+        try {
+            const config = await getGuildConfig(member.guild.id);
+            if (!config?.autorole_id) return;
 
-    const role = member.guild.roles.cache.get(roleId);
-    if (!role) {
-        return console.error('❌ Rôle auto non trouvé !');
-    }
+            const role = member.guild.roles.cache.get(config.autorole_id);
+            if (!role) {
+                console.warn(`[AutoRole] ⚠️ Rôle ${config.autorole_id} introuvable sur ${member.guild.name}`);
+                return;
+            }
 
-    try {
-        await member.roles.add(role);
-        console.log(`✅ Rôle "${role.name}" ajouté à ${member.user.tag}`);
-    } catch (error) {
-        console.error(`❌ Impossible d'ajouter le rôle à ${member.user.tag}:`, error);
+            await member.roles.add(role);
+            console.log(`[AutoRole] ✅ Rôle "${role.name}" ajouté à ${member.user.tag}`);
+        } catch (error) {
+            console.error(`[AutoRole] ❌ Erreur pour ${member.user.tag}:`, error.message);
+        }
     }
 };

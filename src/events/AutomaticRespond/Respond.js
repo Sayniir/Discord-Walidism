@@ -1,42 +1,31 @@
-module.exports = async (message, client) => {
+module.exports = {
+    name: 'messageCreate',
+    async execute(message, client) {
+        if (message.author.bot) return;
 
+        const content = message.content.toLowerCase();
 
-    // anglais
+        // Anglais
+        if (content.includes('hello')) {
+            await message.react('👋').catch(() => {});
+            await message.channel.send('Hi !').catch(() => {});
+        } else if (content.includes('help') || content.includes('aide')) {
+            await message.channel.send('Pour obtenir de l\'aide, consulte les salons d\'aide du serveur !').catch(() => {});
+        } else if (content.includes('rule') || content.includes('regle')) {
+            await message.channel.send('Tu peux trouver les règles dans le salon dédié du serveur !').catch(() => {});
+        } else if (content.includes('new') || content.includes('nouveau')) {
+            await message.channel.send('Les nouveautés sont disponibles dans le salon d\'annonces du serveur !').catch(() => {});
+        }
 
-    if(message.content.toLowerCase().includes('hello')){
-        await message.react('👋')
-        message.channel.send("Hi")
+        // Français
+        if (content.includes('salut')) {
+            await message.react('👋').catch(() => {});
+            await message.channel.send('Salut !').catch(() => {});
+        }
+
+        // Easter eggs
+        if (content.includes('bite')) {
+            await message.react('👀').catch(() => {});
+        }
     }
-    else if(message.content.toLowerCase().includes('help')){
-        await message.channel.send('you can go to <#1386913263345995836>')
-    }
-    else if(message.content.toLowerCase().includes('rule')){
-        await message.channel.send('You can find the rules right here <#1386740813794643978>')
-    }    
-    else if(message.content.toLowerCase().includes('new')){
-        await message.channel.send('You can find the news right here ! <#1386740901329764554>')
-    }
-
-
-
-    // français
-
-    if(message.content.toLowerCase().includes('Salut')){
-        await message.react('👋')
-        message.channel.send("Salut")
-    }
-    else if(message.content.toLowerCase().includes('regle')){
-        await message.channel.send('You can find the rules right here <#1386740813794643978>')
-    }   
-    else if(message.content.toLowerCase().includes('nouveau')){
-        await message.channel.send('You can find the news right here ! <#1386740901329764554>')
-    } 
-    else if(message.content.toLowerCase().includes('aide')){
-        await message.channel.send('you can find help right here <#1386913263345995836>')
-    }
-    else if(message.content.toLowerCase().includes('bite')){
-        await message.react('👀')
-    }
-
-
 };

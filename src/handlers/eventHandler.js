@@ -1,18 +1,34 @@
-const { readdirSync } = require("fs");
+const { readdirSync } = require('fs');
+const path = require('path');
 
-module.exports = function loadCommands(client) {
+/**
+ * Charge dynamiquement tous les events depuis src/events/
+ * Chaque sous-dossier = un event Discord, chaque fichier = un handler
+ */
+module.exports = (client) => {
+    const eventsPath = path.join(__dirname, '..', 'events');
+    const eventFolders = readdirSync(eventsPath);
 
-    let count = 0;
-    const dirsCommands = readdirSync("./commands/");
+    for (const folder of eventFolders) {
+        const folderPath = path.join(eventsPath, folder);
+        const eventFiles = readdirSync(folderPath).filter(f => f.endsWith('.js'));
 
-    for(const dir of dirsCommands) {
-        const filesDir = readdirSync(`./commands/${dir}/`).filter(f => f.endsWith(".js"));
-        for(const file of filesDir) {
-            const command = require(`../commands/${dir}/${file}`);
-            client.commands.set(command.data.name, command);
-            count++;
-        };
-    };
+        for (const file of eventFiles) {
+            const filePath = path.join(folderPath, file);
+            const event = require(filePath);
 
-    console.log(`[Commands] => ${count} loaded commands`);
+            if (!event.name || !event.execute) {
+                console.warn(`[EventHandler] ⚠️ Fichier ${file} ignoré (name ou execute manquant)`);
+                continue;
+            }
+
+            if (event.once) {
+                client.once(event.name, (...args) => event.execute(...args, client));
+            } else {
+                client.on(event.name, (...args) => event.execute(...args, client));
+            }
+
+            console.log(`[EventHandler] ✅ Event chargé: ${event.name} (${file})`);
+        }
+    }
 };

@@ -1,101 +1,113 @@
-const { Client, Interaction, ApplicationCommandOptionType, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { getGuildConfig } = require('../../database/queries');
 
 module.exports = {
-    name: 'ban',
-    description: 'Bans a user from the server.',
-    options: [
-        {
-            name: 'user',
-            description: 'The user to ban',
-            type: ApplicationCommandOptionType.User,
-            required: true,
-        },
-        {
-            name: 'reason',
-            description: 'The reason for the ban',
-            type: ApplicationCommandOptionType.String,
-            required: false,
-        }
-    ],
-    default_member_permissions: PermissionFlagsBits.Administrator.toString(), // Visible uniquement pour les admins
-    permissionsRequired: [PermissionFlagsBits.BanMembers],
-    botPermissions: [PermissionFlagsBits.BanMembers],
+    data: new SlashCommandBuilder()
+        .setName('ban')
+        .setDescription('Bannit un utilisateur du serveur.')
+        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
+        .addUserOption(option =>
+            option.setName('user')
+                .setDescription('L\'utilisateur à bannir')
+                .setRequired(true)
+        )
+        .addStringOption(option =>
+            option.setName('reason')
+                .setDescription('La raison du bannissement')
+                .setRequired(false)
+        ),
 
-    /**
-     * @param {Client} client 
-     * @param {Interaction} interaction 
-     */
-    callback: async (client, interaction) => {
+    async execute(interaction, client) {
         try {
             const targetUser = interaction.options.getUser('user');
-            const reason = interaction.options.getString('reason') || 'No reason provided';
+            const reason = interaction.options.getString('reason') || 'Aucune raison fournie';
 
-            await interaction.deferReply();
+            await interaction.deferReply({ ephemeral: true });
 
-            // Récupérer le membre du serveur
-            let targetMember;
-            try {
-                targetMember = await interaction.guild.members.fetch(targetUser.id);
-            } catch (error) {
-                return interaction.editReply({
-                    content: 'User not found in this server.',
-                });
-            }
-
-            // Vérifications de sécurité
+            // Vérifications de sécurité de base
             if (targetUser.id === client.user.id) {
-                return interaction.editReply({
-                    content: 'You cannot ban the bot.',
-                });
+                return interaction.editReply({ content: '❌ Vous ne pouvez pas bannir le bot.' });
             }
 
             if (targetUser.id === interaction.user.id) {
-                return interaction.editReply({
-                    content: 'You cannot ban yourself.',
-                });
+                return interaction.editReply({ content: '❌ Vous ne pouvez pas vous bannir vous-même.' });
             }
 
             if (targetUser.id === interaction.guild.ownerId) {
-                return interaction.editReply({
-                    content: 'You cannot ban the server owner.',
-                });
+                return interaction.editReply({ content: '❌ Vous ne pouvez pas bannir le propriétaire du serveur.' });
             }
 
-            const targetUserRolePosition = targetMember.roles.highest.position;
-            const requestingUserRolePosition = interaction.member.roles.highest.position;
-            const botRolePosition = interaction.guild.members.me.roles.highest.position;
-
-            if (requestingUserRolePosition <= targetUserRolePosition) {
-                return interaction.editReply({
-                    content: 'You cannot ban this user because they have a higher or equal role than you.',
-                });
+            // Récupérer le membre du serveur s'il y est présent
+            let targetMember;
+            try {
+                targetMember = await interaction.guild.members.fetch(targetUser.id);
+            } catch {
+                // L'utilisateur n'est pas sur le serveur, on peut quand même le bannir par son ID
             }
 
-            if (botRolePosition <= targetUserRolePosition) {
-                return interaction.editReply({
-                    content: 'I cannot ban this user because they have a higher or equal role than me.',
-                });
+            if (targetMember) {
+                const targetUserRolePosition = targetMember.roles.highest.position;
+                const requestingUserRolePosition = interaction.member.roles.highest.position;
+                const botRolePosition = interaction.guild.members.me.roles.highest.position;
+
+                if (requestingUserRolePosition <= targetUserRolePosition && interaction.user.id !== interaction.guild.ownerId) {
+                    return interaction.editReply({
+                        content: '❌ Vous ne pouvez pas bannir cet utilisateur car il a un rôle supérieur ou égal au vôtre.'
+                    });
+                }
+
+                if (botRolePosition <= targetUserRolePosition) {
+                    return interaction.editReply({
+                        content: '❌ Je ne peux pas bannir cet utilisateur car il a un rôle supérieur ou égal au mien.'
+                    });
+                }
             }
 
-            // Bannir l'utilisateur
-            await targetMember.ban({ reason });
+            // Envoyer un message privé avant de bannir
+            try {
+                const dmEmbed = new EmbedBuilder()
+                    .setTitle('🚫 Bannissement')
+                    .setDescription(`Vous avez été banni du serveur **${interaction.guild.name}**.\n**Raison :** ${reason}`)
+                    .setColor('#ff3333')
+                    .setTimestamp();
+                await targetUser.send({ embeds: [dmEmbed] });
+            } catch {
+                console.log(`[Ban Command] Impossible de MP ${targetUser.tag}`);
+            }
 
+            // Bannir de la guilde
+            await interaction.guild.members.ban(targetUser.id, { reason });
+
+            // Confirmer l'action
             await interaction.editReply({
-                content: `✅ Successfully banned **${targetUser.tag}** for: *${reason}*`,
+                content: `✅ **${targetUser.tag}** a été banni avec succès pour : *${reason}*`
             });
 
-        } catch (error) {
-            console.error('Error while banning user:', error);
-
-            const errorMessage = {
-                content: 'An error occurred while trying to ban the user.'
-            };
-
-            if (interaction.replied || interaction.deferred) {
-                return interaction.editReply(errorMessage);
-            } else {
-                return interaction.reply(errorMessage);
+            // Log de modération dynamique
+            try {
+                const config = await getGuildConfig(interaction.guild.id);
+                if (config?.log_channel_id) {
+                    const logChannel = interaction.guild.channels.cache.get(config.log_channel_id);
+                    if (logChannel) {
+                        const logEmbed = new EmbedBuilder()
+                            .setColor('#ff3333')
+                            .setTitle('📋 Action de Modération : Bannissement')
+                            .addFields(
+                                { name: 'Utilisateur banni', value: `${targetUser} (\`${targetUser.id}\`)`, inline: true },
+                                { name: 'Modérateur', value: `${interaction.user} (\`${interaction.user.id}\`)`, inline: true },
+                                { name: 'Raison', value: reason, inline: false }
+                            )
+                            .setTimestamp();
+                        await logChannel.send({ embeds: [logEmbed] });
+                    }
+                }
+            } catch (logError) {
+                console.error('[Ban Command] Erreur logging:', logError);
             }
+
+        } catch (error) {
+            console.error('[Ban Command] Erreur:', error);
+            return interaction.editReply({ content: '❌ Une erreur est survenue lors de l\'exécution de la commande.' });
         }
     }
 };

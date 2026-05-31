@@ -3,24 +3,24 @@ const { getGuildConfig } = require('../../database/queries');
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('kick')
-        .setDescription('Expulse un utilisateur du serveur.')
-        .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers)
+        .setName('warn')
+        .setDescription('Avertit un utilisateur du serveur.')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
         .addUserOption(option =>
             option.setName('user')
-                .setDescription('L\'utilisateur à expulser')
+                .setDescription('L\'utilisateur à avertir')
                 .setRequired(true)
         )
         .addStringOption(option =>
             option.setName('reason')
-                .setDescription('La raison de l\'expulsion')
-                .setRequired(false)
+                .setDescription('La raison de l\'avertissement')
+                .setRequired(true)
         ),
 
     async execute(interaction, client) {
         try {
             const targetUser = interaction.options.getUser('user');
-            const reason = interaction.options.getString('reason') || 'Aucune raison fournie';
+            const reason = interaction.options.getString('reason');
 
             await interaction.deferReply({ ephemeral: true });
 
@@ -32,53 +32,44 @@ module.exports = {
                 return interaction.editReply({ content: '❌ Utilisateur non trouvé sur ce serveur.' });
             }
 
-            // Vérifications de sécurité de base
+            // Vérifications de sécurité
             if (targetUser.id === client.user.id) {
-                return interaction.editReply({ content: '❌ Vous ne pouvez pas expulser le bot.' });
+                return interaction.editReply({ content: '❌ Vous ne pouvez pas avertir le bot.' });
             }
 
             if (targetUser.id === interaction.user.id) {
-                return interaction.editReply({ content: '❌ Vous ne pouvez pas vous expulser vous-même.' });
+                return interaction.editReply({ content: '❌ Vous ne pouvez pas vous avertir vous-même.' });
             }
 
             if (targetUser.id === interaction.guild.ownerId) {
-                return interaction.editReply({ content: '❌ Vous ne pouvez pas expulser le propriétaire du serveur.' });
+                return interaction.editReply({ content: '❌ Vous ne pouvez pas avertir le propriétaire du serveur.' });
             }
 
             const targetUserRolePosition = targetMember.roles.highest.position;
             const requestingUserRolePosition = interaction.member.roles.highest.position;
-            const botRolePosition = interaction.guild.members.me.roles.highest.position;
 
             if (requestingUserRolePosition <= targetUserRolePosition && interaction.user.id !== interaction.guild.ownerId) {
                 return interaction.editReply({
-                    content: '❌ Vous ne pouvez pas expulser cet utilisateur car il a un rôle supérieur ou égal au vôtre.'
+                    content: '❌ Vous ne pouvez pas avertir cet utilisateur car il a un rôle supérieur ou égal au vôtre.'
                 });
             }
 
-            if (botRolePosition <= targetUserRolePosition) {
-                return interaction.editReply({
-                    content: '❌ Je ne peux pas expulser cet utilisateur car il a un rôle supérieur ou égal au mien.'
-                });
-            }
-
-            // Envoyer un message privé avant d'expulser
+            // Envoyer un message privé
+            let dmSent = true;
             try {
                 const dmEmbed = new EmbedBuilder()
-                    .setTitle('👋 Expulsion')
-                    .setDescription(`Vous avez été expulsé du serveur **${interaction.guild.name}**.\n**Raison :** ${reason}`)
-                    .setColor('#ffa500')
+                    .setTitle('⚠️ Avertissement')
+                    .setDescription(`Vous avez reçu un avertissement sur le serveur **${interaction.guild.name}**.\n**Raison :** ${reason}`)
+                    .setColor('#f1c40f')
                     .setTimestamp();
                 await targetUser.send({ embeds: [dmEmbed] });
             } catch {
-                console.log(`[Kick Command] Impossible de MP ${targetUser.tag}`);
+                dmSent = false;
             }
-
-            // Expulser la cible
-            await targetMember.kick(reason);
 
             // Confirmer l'action
             await interaction.editReply({
-                content: `✅ **${targetUser.tag}** a été expulsé avec succès pour : *${reason}*`
+                content: `⚠️ **${targetUser.tag}** a été averti avec succès pour : *${reason}*${!dmSent ? ' (Impossible de lui envoyer un MP)' : ''}`
             });
 
             // Log de modération dynamique
@@ -88,10 +79,10 @@ module.exports = {
                     const logChannel = interaction.guild.channels.cache.get(config.log_channel_id);
                     if (logChannel) {
                         const logEmbed = new EmbedBuilder()
-                            .setColor('#ffa500')
-                            .setTitle('📋 Action de Modération : Expulsion')
+                            .setColor('#f1c40f')
+                            .setTitle('📋 Action de Modération : Avertissement')
                             .addFields(
-                                { name: 'Utilisateur expulsé', value: `${targetUser} (\`${targetUser.id}\`)`, inline: true },
+                                { name: 'Utilisateur averti', value: `${targetUser} (\`${targetUser.id}\`)`, inline: true },
                                 { name: 'Modérateur', value: `${interaction.user} (\`${interaction.user.id}\`)`, inline: true },
                                 { name: 'Raison', value: reason, inline: false }
                             )
@@ -100,11 +91,11 @@ module.exports = {
                     }
                 }
             } catch (logError) {
-                console.error('[Kick Command] Erreur logging:', logError);
+                console.error('[Warn Command] Erreur logging:', logError);
             }
 
         } catch (error) {
-            console.error('[Kick Command] Erreur:', error);
+            console.error('[Warn Command] Erreur:', error);
             return interaction.editReply({ content: '❌ Une erreur est survenue lors de l\'exécution de la commande.' });
         }
     }

@@ -1,66 +1,29 @@
-const { devs, testServer } = require('../../../config.json');
-const getLocalCommands = require('../../utils/getLocalcommands');
+module.exports = {
+    name: 'interactionCreate',
+    async execute(interaction, client) {
+        if (!interaction.isChatInputCommand()) return;
 
-module.exports = async (client, interaction) => {
-  if (!interaction.isChatInputCommand()) return;
+        const command = client.commands?.get(interaction.commandName);
+        if (!command) {
+            // Les commandes musique (play, stop, skip, etc.) sont gérées directement par MusicBot
+            // On les ignore silencieusement ici pour éviter les doublons
+            const musicCommands = new Set(['play', 'stop', 'skip', 'queue', 'nowplaying', 'pause', 'volume', 'shuffle', 'clear']);
+            if (musicCommands.has(interaction.commandName)) return;
 
-  const localCommands = getLocalCommands();
-
-  try {
-    const commandObject = localCommands.find(
-      (cmd) => cmd.name === interaction.commandName
-    );
-
-    if (!commandObject) return;
-
-    if (commandObject.devOnly) {
-      if (!devs.includes(interaction.member.id)) {
-        interaction.reply({
-          content: 'Only developers are allowed to run this command.',
-          ephemeral: true,
-        });
-        return;
-      }
-    }
-
-    if (commandObject.testOnly) {
-      if (!(interaction.guild.id === testServer)) {
-        interaction.reply({
-          content: 'This command cannot be ran here.',
-          ephemeral: true,
-        });
-        return;
-      }
-    }
-
-    if (commandObject.permissionsRequired?.length) {
-      for (const permission of commandObject.permissionsRequired) {
-        if (!interaction.member.permissions.has(permission)) {
-          interaction.reply({
-            content: 'Not enough permissions.',
-            ephemeral: true,
-          });
-          return;
+            console.warn(`[InteractionCreate] ⚠️ Commande inconnue: /${interaction.commandName}`);
+            return interaction.reply({ content: '❌ Commande inconnue.', ephemeral: true }).catch(() => {});
         }
-      }
-    }
 
-    if (commandObject.botPermissions?.length) {
-      for (const permission of commandObject.botPermissions) {
-        const bot = interaction.guild.members.me;
-
-        if (!bot.permissions.has(permission)) {
-          interaction.reply({
-            content: "I don't have enough permissions.",
-            ephemeral: true,
-          });
-          return;
+        try {
+            await command.execute(interaction, client);
+        } catch (error) {
+            console.error(`[InteractionCreate] ❌ Erreur /${interaction.commandName}:`, error);
+            const msg = { content: '❌ Une erreur est survenue lors de l\'exécution de cette commande.', ephemeral: true };
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(msg).catch(() => {});
+            } else {
+                await interaction.reply(msg).catch(() => {});
+            }
         }
-      }
     }
-
-    await commandObject.callback(client, interaction);
-  } catch (error) {
-    console.log(`There was an error running this command: ${error}`);
-  }
 };
