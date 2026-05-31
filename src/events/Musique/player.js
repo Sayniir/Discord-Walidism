@@ -224,19 +224,27 @@ async function getOrCreateConnection(guild, voiceChannel) {
   });
 
   try {
-    // On attend que la connexion soit prête (5s max)
-    await entersState(connection, VoiceConnectionStatus.Ready, 5_000);
-  } catch {
+    // On attend que la connexion soit prête (15s max — Discord peut être lent)
+    await entersState(connection, VoiceConnectionStatus.Ready, 15_000);
+  } catch (err) {
     connection.destroy();
-    throw new Error("Impossible de rejoindre le salon vocal");
+    throw new Error(`Impossible de rejoindre le salon vocal (${err.message})`);
   }
 
   connection.on(VoiceConnectionStatus.Disconnected, async () => {
     try {
-      // Tentative de reconnexion automatique (2s)
-      await entersState(connection, VoiceConnectionStatus.Connecting, 2_000);
+      // Discord envoie Disconnected puis Connecting/Ready lors d'une coupure réseau
+      // On attend l'un ou l'autre pendant 10s avant de considérer la connexion perdue
+      await Promise.race([
+        entersState(connection, VoiceConnectionStatus.Signalling,  10_000),
+        entersState(connection, VoiceConnectionStatus.Connecting,  10_000),
+      ]);
+      // Connexion en cours de rétablissement — on attend qu'elle soit Ready
+      await entersState(connection, VoiceConnectionStatus.Ready, 15_000);
+      console.log(`[Music] ♻️ Reconnexion réussie sur ${guild.name}`);
     } catch {
-      // Reconnexion échouée → nettoyage
+      // Toujours déconnecté après 25s → on lâche
+      console.warn(`[Music] ⚠️ Reconnexion échouée sur ${guild.name}, nettoyage`);
       cleanup(guild.id);
     }
   });
