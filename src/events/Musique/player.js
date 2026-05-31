@@ -526,9 +526,19 @@ async searchSong(query) {
     if (!queue || queue.length === 0) return;
 
     const song = queue[0];
+    console.log("[DEBUG] song:", JSON.stringify(song)); // ← ajoute cette ligne
+
+    // Debug: afficher les infos de la chanson
+    console.log(`[Music] 🎵 Tentative de lecture:`, {
+      title: song?.title,
+      url: song?.url,
+      urlType: typeof song?.url,
+      urlValue: JSON.stringify(song?.url)
+      
+    });
 
     // Vérification de sécurité : si la chanson est invalide, on la skip
-    if (!song || !song.url) {
+    if (!song || !song.url || song.url === 'undefined' || song.url === 'null') {
       console.error(`[Music] ❌ Chanson invalide détectée, skip...`);
       queue.shift();
       if (queue.length > 0) {
