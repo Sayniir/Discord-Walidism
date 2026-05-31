@@ -7,6 +7,7 @@ module.exports = {
         try {
             const musicBot = new MusicBot(client);
             await musicBot.init();
+            musicBot.setupEventListeners();
             console.log('[Music] ✅ Module musique initialisé.');
         } catch (error) {
             console.error('[Music] ❌ Erreur initialisation module musique:', error);
