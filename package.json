@@ -11,6 +11,7 @@
   "description": "a general discord bot",
   "dependencies": {
     "@discordjs/voice": "^0.18.0",
+    "@distube/ytdl-core": "^4.16.12",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@napi-rs/canvas": "^0.1.76",
     "@supabase/supabase-js": "^2.106.2",
@@ -23,6 +24,7 @@
     "play-dl": "^1.9.6",
     "pretty-ms": "^9.2.0",
     "spotify-web-api-node": "^5.0.2",
+    "yt-dlp-wrap": "^2.3.12",
     "yt-search": "^2.13.1",
     "ytpl": "^2.3.0"
   }
