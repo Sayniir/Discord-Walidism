@@ -555,7 +555,16 @@ async searchSong(query) {
 
       pausedStates.set(guild.id, false);
 
-      const stream = await playdl.stream(song.url, { quality: 2 });
+      // Obtenir les infos vidéo pour avoir une URL streamable valide
+      let streamUrl = song.url;
+      try {
+        const videoInfo = await playdl.video_info(song.url);
+        streamUrl = videoInfo.video_details.url;
+      } catch (infoError) {
+        console.warn(`[Music] ⚠️ Impossible de récupérer video_info, utilisation de l'URL directe`);
+      }
+
+      const stream = await playdl.stream(streamUrl, { quality: 2 });
 
       const resource = createAudioResource(stream.stream, {
         inputType: stream.type,
