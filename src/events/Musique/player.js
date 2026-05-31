@@ -135,11 +135,40 @@ class MusicBot {
 
       await interaction.deferReply();
 
+      // Déterminer le type de recherche
+      let searchEngine = QueryType.AUTO;
+      
+      // Si c'est un lien YouTube
+      if (query.includes('youtube.com') || query.includes('youtu.be')) {
+        searchEngine = QueryType.YOUTUBE_VIDEO;
+      }
+      // Si c'est un lien Spotify
+      else if (query.includes('spotify.com')) {
+        searchEngine = QueryType.SPOTIFY_SONG;
+      }
+      // Si c'est une recherche textuelle, forcer YouTube
+      else {
+        searchEngine = QueryType.YOUTUBE_SEARCH;
+      }
+
+      console.log(`[Music] Recherche: "${query}" avec engine: ${searchEngine}`);
+
       // Rechercher la piste
-      const searchResult = await this.player.search(query, {
+      let searchResult = await this.player.search(query, {
         requestedBy: member,
-        searchEngine: QueryType.AUTO,
+        searchEngine: searchEngine,
       });
+
+      // Si aucun résultat avec le premier engine, essayer avec YouTube Search
+      if ((!searchResult || !searchResult.tracks.length) && searchEngine !== QueryType.YOUTUBE_SEARCH) {
+        console.log(`[Music] Aucun résultat, tentative avec YouTube Search...`);
+        searchResult = await this.player.search(query, {
+          requestedBy: member,
+          searchEngine: QueryType.YOUTUBE_SEARCH,
+        });
+      }
+
+      console.log(`[Music] Résultats trouvés: ${searchResult?.tracks?.length || 0}`);
 
       if (!searchResult || !searchResult.tracks.length) {
         return interaction.editReply({
@@ -183,13 +212,21 @@ class MusicBot {
       }
     } catch (error) {
       console.error("[Music] ❌ Erreur handlePlayCommand:", error);
+      console.error("[Music] Stack:", error.stack);
+      
+      let errorMessage = "❌ Une erreur est survenue lors de la lecture.";
+      
+      if (error.message) {
+        errorMessage += `\n**Détails:** ${error.message}`;
+      }
+      
       if (interaction.deferred) {
         await interaction.editReply({
-          content: "❌ Une erreur est survenue lors de la lecture.",
+          content: errorMessage,
         });
       } else {
         await interaction.reply({
-          content: "❌ Une erreur est survenue lors de la lecture.",
+          content: errorMessage,
           ephemeral: true,
         });
       }
