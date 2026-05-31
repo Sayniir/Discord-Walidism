@@ -8,12 +8,12 @@ const {
   VoiceConnectionStatus,
   getVoiceConnection,
 } = require("@discordjs/voice");
-const ytdl = require("@distube/ytdl-core"); // Version patchée de ytdl-core
+const playdl = require("play-dl");
 const ytSearch = require("yt-search");
 const SpotifyWebApi = require("spotify-web-api-node");
 const ffmpegStatic = require("ffmpeg-static");
-const ytpl = require("ytpl"); // Pour les playlists YouTube
-const pLimit = require("p-limit"); // Pour limiter les requêtes parallèles
+const ytpl = require("ytpl");
+const pLimit = require("p-limit");
 
 // Configuration du chemin FFmpeg
 if (ffmpegStatic) {
@@ -33,7 +33,7 @@ const voiceConnections = new Map();
 const audioPlayers = new Map();
 const queues = new Map();
 const voiceChannels = new Map();
-const pausedStates = new Map(); // Nouvelle Map pour suivre l'état de pause
+const pausedStates = new Map();
 
 class MusicBot {
   constructor(client) {
@@ -102,8 +102,7 @@ class MusicBot {
         console.error("Erreur lors du traitement de la commande:", error);
         if (!interaction.replied && !interaction.deferred) {
           await interaction.reply({
-            content:
-              "Une erreur est survenue lors de l'exécution de la commande.",
+            content: "Une erreur est survenue lors de l'exécution de la commande.",
             ephemeral: true,
           });
         }
@@ -151,17 +150,12 @@ class MusicBot {
       });
     }
 
-    // Mélanger la queue en gardant la première chanson (en cours)
     const currentSong = queue[0];
     const remainingSongs = queue.slice(1);
 
-    // Algorithme de Fisher-Yates pour mélanger
     for (let i = remainingSongs.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [remainingSongs[i], remainingSongs[j]] = [
-        remainingSongs[j],
-        remainingSongs[i],
-      ];
+      [remainingSongs[i], remainingSongs[j]] = [remainingSongs[j], remainingSongs[i]];
     }
 
     queues.set(guild.id, [currentSong, ...remainingSongs]);
@@ -186,7 +180,7 @@ class MusicBot {
     }
 
     const removedCount = queue.length - 1;
-    queues.set(guild.id, [queue[0]]); // Garder seulement la chanson actuelle
+    queues.set(guild.id, [queue[0]]);
 
     const clearEmbed = new EmbedBuilder()
       .setColor("#ff0000")
@@ -248,10 +242,7 @@ class MusicBot {
           .setColor("#ff0000")
           .setTitle("Erreur")
           .setDescription("Vous devez être dans un salon vocal!");
-        return await interaction.reply({
-          embeds: [errorEmbed],
-          ephemeral: true,
-        });
+        return await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
       }
     }
 
@@ -261,43 +252,31 @@ class MusicBot {
       if (this.isPlaylistLink(query)) {
         const playlistResult = await this.handlePlaylist(query);
 
-        if (playlistResult.error) {
-          throw new Error(playlistResult.error);
-        }
-
+        if (playlistResult.error) throw new Error(playlistResult.error);
         if (!playlistResult.songs || playlistResult.songs.length === 0) {
           throw new Error("Aucune chanson trouvée dans la playlist");
         }
 
         const voiceChannel = member.voice.channel;
-
         if (!queues.has(guild.id)) queues.set(guild.id, []);
         const queue = queues.get(guild.id);
         const initialLength = queue.length;
 
-        // Ajouter toutes les chansons à la file d'attente
         const songsWithRequester = playlistResult.songs.map((song) => ({
           ...song,
           requestedBy: member.displayName,
         }));
-
         queue.push(...songsWithRequester);
 
         const addedEmbed = new EmbedBuilder()
           .setColor("#00ff00")
           .setTitle(`🎵 Playlist ajoutée: ${playlistResult.playlistTitle}`)
-          .setDescription(
-            `${playlistResult.songs.length} chansons ajoutées à la file d'attente`
-          )
-          .setFooter({
-            text: `La file d'attente contient maintenant ${queue.length} chansons`,
-          });
+          .setDescription(`${playlistResult.songs.length} chansons ajoutées à la file d'attente`)
+          .setFooter({ text: `La file d'attente contient maintenant ${queue.length} chansons` });
 
         await interaction.editReply({ embeds: [addedEmbed] });
 
-        if (initialLength === 0) {
-          await this.playQueue(guild, voiceChannel);
-        }
+        if (initialLength === 0) await this.playQueue(guild, voiceChannel);
         return;
       }
 
@@ -312,26 +291,17 @@ class MusicBot {
 
       const voiceChannel = member.voice.channel;
 
-      // Vérifier les permissions
-      if (
-        !voiceChannel.permissionsFor(this.client.user).has(["Connect", "Speak"])
-      ) {
+      if (!voiceChannel.permissionsFor(this.client.user).has(["Connect", "Speak"])) {
         const errorEmbed = new EmbedBuilder()
           .setColor("#ff0000")
           .setTitle("Permissions insuffisantes")
-          .setDescription(
-            "Permissions manquantes pour rejoindre/parler dans ce salon"
-          );
+          .setDescription("Permissions manquantes pour rejoindre/parler dans ce salon");
         return await interaction.editReply({ embeds: [errorEmbed] });
       }
 
       if (!queues.has(guild.id)) queues.set(guild.id, []);
       const queue = queues.get(guild.id);
-
-      queue.push({
-        ...songInfo,
-        requestedBy: member.displayName,
-      });
+      queue.push({ ...songInfo, requestedBy: member.displayName });
 
       if (queue.length === 1) {
         await this.playQueue(guild, voiceChannel);
@@ -341,16 +311,8 @@ class MusicBot {
           .setTitle("🎵 Lecture en cours")
           .setDescription(`**${songInfo.title}**`)
           .addFields(
-            {
-              name: "👤 Artiste",
-              value: songInfo.artist || "Inconnu",
-              inline: true,
-            },
-            {
-              name: "⏱️ Durée",
-              value: songInfo.duration || "Inconnue",
-              inline: true,
-            },
+            { name: "👤 Artiste", value: songInfo.artist || "Inconnu", inline: true },
+            { name: "⏱️ Durée", value: songInfo.duration || "Inconnue", inline: true },
             { name: "🎧 Demandé par", value: member.displayName, inline: true }
           )
           .setThumbnail(songInfo.thumbnail);
@@ -372,23 +334,16 @@ class MusicBot {
     } catch (error) {
       console.error("Erreur lors de la lecture:", error);
 
-      let errorMessage =
-        "Une erreur est survenue lors de la lecture de la musique";
-      if (error.message.includes("non supporté")) {
-        errorMessage = error.message;
-      } else if (error.message.includes("Aucune chanson trouvée")) {
-        errorMessage = "Aucune chanson valide trouvée dans la playlist";
-      } else if (error.message.includes("Video unavailable")) {
-        errorMessage = "Cette vidéo n'est pas disponible";
-      }
+      let errorMessage = "Une erreur est survenue lors de la lecture de la musique";
+      if (error.message.includes("non supporté")) errorMessage = error.message;
+      else if (error.message.includes("Aucune chanson trouvée")) errorMessage = "Aucune chanson valide trouvée dans la playlist";
+      else if (error.message.includes("Video unavailable")) errorMessage = "Cette vidéo n'est pas disponible";
 
       const errorEmbed = new EmbedBuilder()
         .setColor("#ff0000")
         .setTitle("Erreur de lecture")
         .setDescription(errorMessage)
-        .setFooter({
-          text: "Support: YouTube, Spotify (chansons et playlists)",
-        });
+        .setFooter({ text: "Support: YouTube, Spotify (chansons et playlists)" });
 
       await interaction.editReply({ embeds: [errorEmbed] });
     }
@@ -405,21 +360,11 @@ class MusicBot {
 
   async handlePlaylist(query) {
     try {
-      if (
-        query.includes("youtube.com/playlist") ||
-        (query.includes("youtube.com/watch?") && query.includes("list="))
-      ) {
+      if (query.includes("youtube.com/playlist") || (query.includes("youtube.com/watch?") && query.includes("list="))) {
         return await this.handleYoutubePlaylist(query);
       }
-
-      if (query.includes("open.spotify.com/playlist")) {
-        return await this.handleSpotifyPlaylist(query);
-      }
-
-      if (query.includes("open.spotify.com/album")) {
-        return await this.handleSpotifyAlbum(query);
-      }
-
+      if (query.includes("open.spotify.com/playlist")) return await this.handleSpotifyPlaylist(query);
+      if (query.includes("open.spotify.com/album")) return await this.handleSpotifyAlbum(query);
       throw new Error("Type de playlist non supporté");
     } catch (error) {
       console.error("Erreur playlist:", error);
@@ -430,12 +375,8 @@ class MusicBot {
   async handleYoutubePlaylist(url) {
     try {
       const playlist = await ytpl(url, { limit: 100 });
-
       const songs = playlist.items
-        .filter(
-          (item) =>
-            item && item.title && !item.title.includes("[Private video]")
-        )
+        .filter((item) => item && item.title && !item.title.includes("[Private video]"))
         .map((item) => ({
           title: item.title,
           artist: item.author?.name || "Inconnu",
@@ -445,16 +386,10 @@ class MusicBot {
           source: "youtube",
           requestedBy: null,
         }));
-
-      return {
-        playlistTitle: playlist.title,
-        songs,
-      };
+      return { playlistTitle: playlist.title, songs };
     } catch (error) {
       console.error("Erreur YouTube playlist:", error);
-      throw new Error(
-        "Impossible de charger la playlist YouTube. Vérifiez le lien"
-      );
+      throw new Error("Impossible de charger la playlist YouTube. Vérifiez le lien");
     }
   }
 
@@ -462,38 +397,17 @@ class MusicBot {
     try {
       const playlistId = this.extractSpotifyId(url);
       const playlistData = await spotifyApi.getPlaylist(playlistId);
-      const tracksData = await spotifyApi.getPlaylistTracks(playlistId, {
-        limit: 100,
-      });
-
-      const tracks = tracksData.body.items
-        .map((item) => item.track)
-        .filter((track) => track && track.preview_url !== null);
+      const tracksData = await spotifyApi.getPlaylistTracks(playlistId, { limit: 100 });
+      const tracks = tracksData.body.items.map((item) => item.track).filter((track) => track && track.preview_url !== null);
 
       const limit = pLimit(3);
-      const songs = [];
+      const results = await Promise.allSettled(tracks.map((track) => limit(() => this.searchYoutubeForSpotifyTrack(track))));
+      const songs = results.filter((r) => r.status === "fulfilled" && r.value).map((r) => r.value);
 
-      const promises = tracks.map((track) =>
-        limit(() => this.searchYoutubeForSpotifyTrack(track))
-      );
-
-      const results = await Promise.allSettled(promises);
-
-      for (const result of results) {
-        if (result.status === "fulfilled" && result.value) {
-          songs.push(result.value);
-        }
-      }
-
-      return {
-        playlistTitle: playlistData.body.name,
-        songs,
-      };
+      return { playlistTitle: playlistData.body.name, songs };
     } catch (error) {
       console.error("Erreur Spotify playlist:", error);
-      throw new Error(
-        "Impossible de charger la playlist Spotify. Vérifiez le lien et les permissions"
-      );
+      throw new Error("Impossible de charger la playlist Spotify. Vérifiez le lien et les permissions");
     }
   }
 
@@ -501,37 +415,17 @@ class MusicBot {
     try {
       const albumId = this.extractSpotifyId(url);
       const albumData = await spotifyApi.getAlbum(albumId);
-      const tracksData = await spotifyApi.getAlbumTracks(albumId, {
-        limit: 100,
-      });
-
+      const tracksData = await spotifyApi.getAlbumTracks(albumId, { limit: 100 });
       const albumCover = albumData.body.images[0]?.url;
-      const tracks = tracksData.body.items;
 
       const limit = pLimit(3);
-      const songs = [];
+      const results = await Promise.allSettled(tracksData.body.items.map((track) => limit(() => this.searchYoutubeForSpotifyTrack(track, albumCover))));
+      const songs = results.filter((r) => r.status === "fulfilled" && r.value).map((r) => r.value);
 
-      const promises = tracks.map((track) =>
-        limit(() => this.searchYoutubeForSpotifyTrack(track, albumCover))
-      );
-
-      const results = await Promise.allSettled(promises);
-
-      for (const result of results) {
-        if (result.status === "fulfilled" && result.value) {
-          songs.push(result.value);
-        }
-      }
-
-      return {
-        playlistTitle: albumData.body.name,
-        songs,
-      };
+      return { playlistTitle: albumData.body.name, songs };
     } catch (error) {
       console.error("Erreur Spotify album:", error);
-      throw new Error(
-        "Impossible de charger l'album Spotify. Vérifiez le lien"
-      );
+      throw new Error("Impossible de charger l'album Spotify. Vérifiez le lien");
     }
   }
 
@@ -543,17 +437,14 @@ class MusicBot {
     try {
       const searchQuery = `${track.artists[0].name} ${track.name}`;
       const result = await ytSearch(searchQuery);
-
       if (result.videos.length > 0) {
-        const video =
-          result.videos.find((v) => v.seconds < 1200) || result.videos[0];
+        const video = result.videos.find((v) => v.seconds < 1200) || result.videos[0];
         return {
           title: track.name,
           artist: track.artists[0].name,
           url: video.url,
           duration: this.formatDuration(video.seconds),
-          thumbnail:
-            track.album?.images[0]?.url || thumbnailFallback || video.thumbnail,
+          thumbnail: track.album?.images[0]?.url || thumbnailFallback || video.thumbnail,
           source: "spotify",
           requestedBy: null,
         };
@@ -567,39 +458,25 @@ class MusicBot {
 
   async searchSong(query) {
     try {
-      const requestOptions = {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-          "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
-          Accept:
-            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        },
-      };
-
-      if (
-        ytdl.validateURL(query) ||
-        query.match(
-          /youtu\.?be(.com)?\/(watch\?v=|shorts\/|embed\/)?([\w-]{11})/
-        )
-      ) {
-        const info = await ytdl.getInfo(query, { requestOptions });
+      // Lien YouTube direct
+      if (playdl.yt_validate(query) === "video") {
+        const info = await playdl.video_info(query);
         return {
-          title: info.videoDetails.title,
-          artist: info.videoDetails.author.name,
+          title: info.video_details.title,
+          artist: info.video_details.channel?.name || "Inconnu",
           url: query,
-          duration: this.formatDuration(info.videoDetails.lengthSeconds),
-          thumbnail: info.videoDetails.thumbnails[0]?.url,
+          duration: this.formatDuration(info.video_details.durationInSec),
+          thumbnail: info.video_details.thumbnails[0]?.url,
           source: "youtube",
         };
       }
 
+      // Lien Spotify track
       if (query.includes("spotify.com/track/")) {
         const trackId = query.split("/track/")[1].split("?")[0];
         try {
           const track = await spotifyApi.getTrack(trackId);
           const searchQuery = `${track.body.artists[0].name} ${track.body.name}`;
-
           const ytResult = await ytSearch(searchQuery);
           if (ytResult.videos.length > 0) {
             const video = ytResult.videos[0];
@@ -613,17 +490,14 @@ class MusicBot {
             };
           }
         } catch (error) {
-          console.warn(
-            "Erreur Spotify, recherche YouTube directe:",
-            error.message
-          );
+          console.warn("Erreur Spotify, recherche YouTube directe:", error.message);
         }
       }
 
+      // Recherche textuelle
       const result = await ytSearch(query);
       if (result.videos.length > 0) {
-        const video =
-          result.videos.find((v) => v.seconds < 1800) || result.videos[0];
+        const video = result.videos.find((v) => v.seconds < 1800) || result.videos[0];
         return {
           title: video.title,
           artist: video.author.name,
@@ -649,32 +523,15 @@ class MusicBot {
 
     try {
       voiceChannels.set(guild.id, voiceChannel);
-      let connection = await this.getOrCreateVoiceConnection(
-        guild,
-        voiceChannel
-      );
-      let player = this.getOrCreateAudioPlayer(guild, connection);
+      const connection = await this.getOrCreateVoiceConnection(guild, voiceChannel);
+      const player = this.getOrCreateAudioPlayer(guild, connection);
 
       pausedStates.set(guild.id, false);
 
-      const requestOptions = {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-          "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
-        },
-      };
+      const stream = await playdl.stream(song.url, { quality: 2 });
 
-      const stream = ytdl(song.url, {
-        filter: "audioonly",
-        quality: "highestaudio",
-        highWaterMark: 1 << 25,
-        requestOptions,
-        dlChunkSize: 0,
-        begin: 0,
-      });
-
-      const resource = createAudioResource(stream, {
+      const resource = createAudioResource(stream.stream, {
+        inputType: stream.type,
         metadata: { title: song.title },
         inlineVolume: true,
       });
@@ -683,28 +540,25 @@ class MusicBot {
       player.play(resource);
     } catch (error) {
       console.error("Erreur lors de la lecture:", error);
-
       queue.shift();
 
       if (queue.length > 0) {
-        const systemChannel =
-          guild.systemChannel ||
-          guild.channels.cache.find((ch) => ch.isTextBased());
+        const systemChannel = guild.systemChannel || guild.channels.cache.find((ch) => ch.isTextBased());
         if (systemChannel) {
           try {
             await systemChannel.send({
               embeds: [
                 new EmbedBuilder()
                   .setColor("#ff9900")
-                  .setDescription(
-                    `⚠️ Impossible de lire "${song.title}", passage à la suivante`
-                  ),
+                  .setDescription(`⚠️ Impossible de lire "${song.title}", passage à la suivante`),
               ],
             });
           } catch (err) {
             console.error("Erreur envoi message:", err);
           }
         }
+        const voiceChannel = voiceChannels.get(guild.id);
+        if (voiceChannel) await this.playQueue(guild, voiceChannel);
       } else {
         this.cleanup(guild.id);
       }
@@ -716,17 +570,10 @@ class MusicBot {
     const queue = queues.get(guild.id);
 
     if (!queue || queue.length === 0) {
-      return await interaction.reply({
-        content: "Aucune musique en cours de lecture.",
-        ephemeral: true,
-      });
+      return await interaction.reply({ content: "Aucune musique en cours de lecture.", ephemeral: true });
     }
-
     if (queue.length <= 1) {
-      return await interaction.reply({
-        content: "Aucune chanson suivante dans la file.",
-        ephemeral: true,
-      });
+      return await interaction.reply({ content: "Aucune chanson suivante dans la file.", ephemeral: true });
     }
 
     const skippedSong = queue[0];
@@ -745,10 +592,7 @@ class MusicBot {
     const queue = queues.get(interaction.guild.id);
 
     if (!queue || queue.length === 0) {
-      return await interaction.reply({
-        content: "📭 La file d'attente est vide.",
-        ephemeral: true,
-      });
+      return await interaction.reply({ content: "📭 La file d'attente est vide.", ephemeral: true });
     }
 
     const queueList = queue
@@ -756,9 +600,7 @@ class MusicBot {
       .map((song, index) => {
         const prefix = index === 0 ? "🎵 **En cours:** " : `${index}. `;
         const requester = song.requestedBy ? ` (${song.requestedBy})` : "";
-        return `${prefix}${song.title} - ${
-          song.artist || "Inconnu"
-        }${requester}`;
+        return `${prefix}${song.title} - ${song.artist || "Inconnu"}${requester}`;
       })
       .join("\n");
 
@@ -766,14 +608,8 @@ class MusicBot {
       const duration = song.duration || "0:00";
       const parts = duration.split(":");
       let seconds = 0;
-      if (parts.length === 2) {
-        seconds = parseInt(parts[0]) * 60 + parseInt(parts[1]);
-      } else if (parts.length === 3) {
-        seconds =
-          parseInt(parts[0]) * 3600 +
-          parseInt(parts[1]) * 60 +
-          parseInt(parts[2]);
-      }
+      if (parts.length === 2) seconds = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+      else if (parts.length === 3) seconds = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
       return total + seconds;
     }, 0);
 
@@ -783,17 +619,11 @@ class MusicBot {
       .setDescription(queueList)
       .addFields(
         { name: "📊 Total", value: `${queue.length} chanson(s)`, inline: true },
-        {
-          name: "⏱️ Durée totale",
-          value: this.formatDuration(totalDuration),
-          inline: true,
-        }
+        { name: "⏱️ Durée totale", value: this.formatDuration(totalDuration), inline: true }
       );
 
     if (queue.length > 10) {
-      queueEmbed.setFooter({
-        text: `... et ${queue.length - 10} autres chansons`,
-      });
+      queueEmbed.setFooter({ text: `... et ${queue.length - 10} autres chansons` });
     }
 
     await interaction.reply({ embeds: [queueEmbed] });
@@ -803,10 +633,7 @@ class MusicBot {
     const queue = queues.get(interaction.guild.id);
 
     if (!queue || queue.length === 0) {
-      return await interaction.reply({
-        content: "Aucune musique en cours de lecture.",
-        ephemeral: true,
-      });
+      return await interaction.reply({ content: "Aucune musique en cours de lecture.", ephemeral: true });
     }
 
     const song = queue[0];
@@ -821,16 +648,8 @@ class MusicBot {
       .addFields(
         { name: "👤 Artiste", value: song.artist || "Inconnu", inline: true },
         { name: "⏱️ Durée", value: song.duration || "Inconnue", inline: true },
-        {
-          name: "🎧 Demandé par",
-          value: song.requestedBy || "Inconnu",
-          inline: true,
-        },
-        {
-          name: "📱 Source",
-          value: song.source === "spotify" ? "Spotify → YouTube" : "YouTube",
-          inline: true,
-        }
+        { name: "🎧 Demandé par", value: song.requestedBy || "Inconnu", inline: true },
+        { name: "📱 Source", value: song.source === "spotify" ? "Spotify → YouTube" : "YouTube", inline: true }
       )
       .setThumbnail(song.thumbnail);
 
@@ -850,23 +669,16 @@ class MusicBot {
     const connection = getVoiceConnection(guild.id);
 
     if (!connection) {
-      return await interaction.reply({
-        content: "Je ne suis connecté à aucun salon vocal.",
-        ephemeral: true,
-      });
+      return await interaction.reply({ content: "Je ne suis connecté à aucun salon vocal.", ephemeral: true });
     }
 
     const queue = queues.get(guild.id);
     const songCount = queue ? queue.length : 0;
 
     queues.delete(guild.id);
-
     const player = audioPlayers.get(guild.id);
     if (player) player.stop();
-
-    // Supprimer l'état de pause
     pausedStates.delete(guild.id);
-
     connection.destroy();
     voiceConnections.delete(guild.id);
     audioPlayers.delete(guild.id);
@@ -875,13 +687,8 @@ class MusicBot {
     const stopEmbed = new EmbedBuilder()
       .setColor("#ff0000")
       .setTitle("⏹️ Arrêt de la musique")
-      .setDescription(`Musique arrêtée et salon vocal quitté.`)
-      .setFooter({
-        text:
-          songCount > 0
-            ? `${songCount} chanson(s) supprimée(s) de la file`
-            : "",
-      });
+      .setDescription("Musique arrêtée et salon vocal quitté.")
+      .setFooter({ text: songCount > 0 ? `${songCount} chanson(s) supprimée(s) de la file` : "" });
 
     await interaction.reply({ embeds: [stopEmbed] });
   }
@@ -899,14 +706,11 @@ class MusicBot {
       voiceConnections.set(guild.id, connection);
 
       connection.on(VoiceConnectionStatus.Ready, () => {
-        console.log(
-          `✅ Connecté au salon vocal "${voiceChannel.name}" sur ${guild.name}`
-        );
+        console.log(`✅ Connecté au salon vocal "${voiceChannel.name}" sur ${guild.name}`);
       });
 
       connection.on(VoiceConnectionStatus.Disconnected, async () => {
         console.log(`Déconnecté du salon vocal sur ${guild.name}`);
-
         setTimeout(async () => {
           if (!getVoiceConnection(guild.id)) {
             try {
@@ -971,11 +775,7 @@ class MusicBot {
     if (!queue) return;
 
     const finishedSong = queue.shift();
-    console.log(
-      `⏭️ Chanson terminée: "${finishedSong?.title}" sur ${guild.name}`
-    );
-
-    // Réinitialiser l'état de pause
+    console.log(`⏭️ Chanson terminée: "${finishedSong?.title}" sur ${guild.name}`);
     pausedStates.set(guild.id, false);
 
     if (queue.length > 0) {
@@ -983,18 +783,14 @@ class MusicBot {
       if (voiceChannel) {
         setTimeout(async () => {
           await this.playQueue(guild, voiceChannel);
-        }, 1000); // Petit délai pour éviter les conflits
+        }, 1000);
       }
     } else {
-      console.log(
-        `📭 File d'attente vide sur ${guild.name}, déconnexion dans 30s`
-      );
+      console.log(`📭 File d'attente vide sur ${guild.name}, déconnexion dans 30s`);
       setTimeout(() => {
         if (!queues.get(guild.id)?.length) {
           this.cleanup(guild.id);
-          console.log(
-            `🚪 Déconnexion automatique (file vide) sur ${guild.name}`
-          );
+          console.log(`🚪 Déconnexion automatique (file vide) sur ${guild.name}`);
         }
       }, 30000);
     }
@@ -1009,77 +805,57 @@ class MusicBot {
         console.error("Erreur de déconnexion:", error);
       }
     }
-
     voiceConnections.delete(guildId);
     audioPlayers.delete(guildId);
     queues.delete(guildId);
     voiceChannels.delete(guildId);
     pausedStates.delete(guildId);
-
     console.log(`🧹 Nettoyage terminé pour le serveur ${guildId}`);
   }
 
   handleVoiceStateUpdate(oldState, newState) {
-    // Si le bot est déplacé ou déconnecté manuellement
     if (oldState.member?.id === this.client.user.id && !newState.channel) {
       this.cleanup(oldState.guild.id);
       console.log(`🔌 Bot déconnecté manuellement sur ${oldState.guild.name}`);
       return;
     }
 
-    // Vérifier si le bot est seul dans le salon
     const voiceChannel = voiceChannels.get(newState.guild.id);
     if (voiceChannel && newState.channelId === voiceChannel.id) {
       const members = voiceChannel.members.filter((member) => !member.user.bot);
-
       if (members.size === 0) {
-        console.log(
-          `👤 Plus d'utilisateurs dans le salon sur ${newState.guild.name}`
-        );
+        console.log(`👤 Plus d'utilisateurs dans le salon sur ${newState.guild.name}`);
         setTimeout(() => {
-          const currentMembers = voiceChannel.members.filter(
-            (member) => !member.user.bot
-          );
+          const currentMembers = voiceChannel.members.filter((member) => !member.user.bot);
           if (currentMembers.size === 0) {
             this.cleanup(newState.guild.id);
-            console.log(
-              `🚪 Déconnexion automatique (salon vide) sur ${newState.guild.name}`
-            );
+            console.log(`🚪 Déconnexion automatique (salon vide) sur ${newState.guild.name}`);
           }
-        }, 60000); // 1 minute de délai
+        }, 60000);
       }
     }
   }
 
   formatDuration(seconds) {
     if (!seconds || isNaN(seconds)) return "0:00";
-
     seconds = parseInt(seconds);
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
-
     if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, "0")}:${secs
-        .toString()
-        .padStart(2, "0")}`;
+      return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
     }
     return `${minutes}:${secs.toString().padStart(2, "0")}`;
   }
 
-  // Méthode utilitaire pour obtenir des statistiques
   getStats() {
     return {
       activeConnections: voiceConnections.size,
       activeQueues: queues.size,
-      totalSongsQueued: Array.from(queues.values()).reduce(
-        (total, queue) => total + queue.length,
-        0
-      ),
+      totalSongsQueued: Array.from(queues.values()).reduce((total, queue) => total + queue.length, 0),
     };
   }
 
-  // Méthode pour forcer le nettoyage de tous les serveurs
   cleanupAll() {
     console.log("🧹 Nettoyage général en cours...");
     const guildIds = Array.from(voiceConnections.keys());
