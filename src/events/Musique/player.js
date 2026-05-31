@@ -257,12 +257,18 @@ class MusicBot {
           throw new Error("Aucune chanson trouvée dans la playlist");
         }
 
+        // Filtrer les chansons invalides (au cas où)
+        const validSongs = playlistResult.songs.filter(s => s && s.url);
+        if (validSongs.length === 0) {
+          throw new Error("Aucune chanson valide trouvée dans la playlist");
+        }
+
         const voiceChannel = member.voice.channel;
         if (!queues.has(guild.id)) queues.set(guild.id, []);
         const queue = queues.get(guild.id);
         const initialLength = queue.length;
 
-        const songsWithRequester = playlistResult.songs.map((song) => ({
+        const songsWithRequester = validSongs.map((song) => ({
           ...song,
           requestedBy: member.displayName,
         }));
@@ -271,7 +277,7 @@ class MusicBot {
         const addedEmbed = new EmbedBuilder()
           .setColor("#00ff00")
           .setTitle(`🎵 Playlist ajoutée: ${playlistResult.playlistTitle}`)
-          .setDescription(`${playlistResult.songs.length} chansons ajoutées à la file d'attente`)
+          .setDescription(`${validSongs.length} chansons ajoutées à la file d'attente`)
           .setFooter({ text: `La file d'attente contient maintenant ${queue.length} chansons` });
 
         await interaction.editReply({ embeds: [addedEmbed] });
@@ -520,6 +526,17 @@ async searchSong(query) {
     if (!queue || queue.length === 0) return;
 
     const song = queue[0];
+
+    // Vérification de sécurité : si la chanson est invalide, on la skip
+    if (!song || !song.url) {
+      console.error(`[Music] ❌ Chanson invalide détectée, skip...`);
+      queue.shift();
+      if (queue.length > 0) {
+        return this.playQueue(guild, voiceChannel);
+      } else {
+        return this.cleanup(guild.id);
+      }
+    }
 
     try {
       voiceChannels.set(guild.id, voiceChannel);
