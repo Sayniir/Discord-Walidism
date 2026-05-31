@@ -16,6 +16,7 @@
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@napi-rs/canvas": "^0.1.76",
     "@supabase/supabase-js": "^2.106.2",
+    "discord-api-types": "^0.37.0",
     "discord-player": "^7.1.0",
     "discord-player-spotify": "^1.1.9",
     "discord-player-youtubei": "^3.0.0-beta.4",
