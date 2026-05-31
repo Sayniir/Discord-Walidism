@@ -456,64 +456,64 @@ class MusicBot {
     }
   }
 
-  async searchSong(query) {
-    try {
-      // Lien YouTube direct
-      if (playdl.yt_validate(query) === "video") {
-        const info = await playdl.video_info(query);
-        return {
-          title: info.video_details.title,
-          artist: info.video_details.channel?.name || "Inconnu",
-          url: query,
-          duration: this.formatDuration(info.video_details.durationInSec),
-          thumbnail: info.video_details.thumbnails[0]?.url,
-          source: "youtube",
-        };
-      }
-
-      // Lien Spotify track
-      if (query.includes("spotify.com/track/")) {
-        const trackId = query.split("/track/")[1].split("?")[0];
-        try {
-          const track = await spotifyApi.getTrack(trackId);
-          const searchQuery = `${track.body.artists[0].name} ${track.body.name}`;
-          const ytResult = await ytSearch(searchQuery);
-          if (ytResult.videos.length > 0) {
-            const video = ytResult.videos[0];
-            return {
-              title: track.body.name,
-              artist: track.body.artists[0].name,
-              url: video.url,
-              duration: this.formatDuration(video.seconds),
-              thumbnail: track.body.album.images[0]?.url || video.thumbnail,
-              source: "spotify",
-            };
-          }
-        } catch (error) {
-          console.warn("Erreur Spotify, recherche YouTube directe:", error.message);
-        }
-      }
-
-      // Recherche textuelle
-      const result = await ytSearch(query);
-      if (result.videos.length > 0) {
-        const video = result.videos.find((v) => v.seconds < 1800) || result.videos[0];
-        return {
-          title: video.title,
-          artist: video.author.name,
-          url: video.url,
-          duration: this.formatDuration(video.seconds),
-          thumbnail: video.thumbnail,
-          source: "youtube",
-        };
-      }
-
-      return null;
-    } catch (error) {
-      console.error("Erreur lors de la recherche:", error);
-      return null;
+async searchSong(query) {
+  try {
+    // Lien YouTube direct
+    const ytValidate = playdl.yt_validate(query);
+    if (ytValidate === "video") {
+      const info = await playdl.video_info(query);
+      return {
+        title: info.video_details.title,
+        artist: info.video_details.channel?.name || "Inconnu",
+        url: info.video_details.url,
+        duration: this.formatDuration(info.video_details.durationInSec),
+        thumbnail: info.video_details.thumbnails[0]?.url,
+        source: "youtube",
+      };
     }
+
+    // Lien Spotify track
+    if (query.includes("spotify.com/track/")) {
+      const trackId = query.split("/track/")[1].split("?")[0];
+      try {
+        const track = await spotifyApi.getTrack(trackId);
+        const searchQuery = `${track.body.artists[0].name} ${track.body.name}`;
+        const searched = await playdl.search(searchQuery, { source: { youtube: "video" }, limit: 1 });
+        if (searched.length > 0) {
+          return {
+            title: track.body.name,
+            artist: track.body.artists[0].name,
+            url: searched[0].url,
+            duration: this.formatDuration(searched[0].durationInSec),
+            thumbnail: track.body.album.images[0]?.url || searched[0].thumbnails[0]?.url,
+            source: "spotify",
+          };
+        }
+      } catch (error) {
+        console.warn("Erreur Spotify, recherche YouTube directe:", error.message);
+      }
+    }
+
+    // Recherche textuelle via play-dl
+    const results = await playdl.search(query, { source: { youtube: "video" }, limit: 5 });
+    if (results.length > 0) {
+      const video = results.find((v) => v.durationInSec < 1800) || results[0];
+      return {
+        title: video.title,
+        artist: video.channel?.name || "Inconnu",
+        url: video.url,
+        duration: this.formatDuration(video.durationInSec),
+        thumbnail: video.thumbnails[0]?.url,
+        source: "youtube",
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error("Erreur lors de la recherche:", error);
+    return null;
   }
+}
 
   async playQueue(guild, voiceChannel) {
     const queue = queues.get(guild.id);
